@@ -1188,10 +1188,19 @@ function enrichInnerCampaignDetails(
   updatedInnerCampaignDetails: any
 ) {
   // resources are stored in eg_cm_resource_details — do NOT write to JSONB
+  const incomingDeliveryRules = requestBody?.CampaignDetails?.deliveryRules;
+  const existingDeliveryRules = requestBody?.ExistingCampaignDetails?.deliveryRules;
   updatedInnerCampaignDetails.deliveryRules =
-    requestBody?.CampaignDetails?.deliveryRules || [];
+    (Array.isArray(incomingDeliveryRules) && incomingDeliveryRules.length > 0)
+      ? incomingDeliveryRules
+      : (Array.isArray(existingDeliveryRules) ? existingDeliveryRules : []);
+
+  const incomingBoundaries = requestBody?.CampaignDetails?.boundaries;
+  const existingBoundaries = requestBody?.ExistingCampaignDetails?.boundaries;
   updatedInnerCampaignDetails.boundaries =
-    requestBody?.CampaignDetails?.boundaries || [];
+    (Array.isArray(incomingBoundaries) && incomingBoundaries.length > 0)
+      ? incomingBoundaries
+      : (Array.isArray(existingBoundaries) ? existingBoundaries : []);
 }
 
 async function enrichAndPersistCampaignForUpdate(

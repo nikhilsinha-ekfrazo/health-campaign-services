@@ -977,6 +977,7 @@ async function validateById(request: any) {
         if (searchResponse?.CampaignDetails?.length > 0) {
             logger.debug(`CampaignDetails : ${getFormattedStringForDebug(searchResponse?.CampaignDetails)}`);
             request.body.ExistingCampaignDetails = searchResponse?.CampaignDetails[0];
+            hydrateRetryPayloadFromExistingCampaign(request);
             if (!(request.body.ExistingCampaignDetails?.status == campaignStatuses?.drafted || request.body.ExistingCampaignDetails?.status == campaignStatuses?.failed)) {
                 throwError("CAMPAIGN", 400, "VALIDATION_ERROR_UPDATE_CAMPAIGN", `Campaign can only be updated in drafted or failed state.`);
             }
@@ -987,6 +988,36 @@ async function validateById(request: any) {
     }
     else {
         throwError("CAMPAIGN", 500, "CAMPAIGN_SEARCH_ERROR");
+    }
+}
+
+/**
+ * Retry updates (action=create on failed campaigns) may arrive with partial payloads
+ * from UI/BFF and accidentally wipe boundaries/resources during persistence.
+ * Hydrate missing/empty definition fields from existing campaign to make retries idempotent.
+ */
+function hydrateRetryPayloadFromExistingCampaign(request: any) {
+    const incoming = request?.body?.CampaignDetails;
+    const existing = request?.body?.ExistingCampaignDetails;
+    const isRetryCreate = incoming?.action === "create" && existing?.status === campaignStatuses?.failed;
+    if (!isRetryCreate || !incoming || !existing) return;
+
+    const hasIncomingBoundaries = Array.isArray(incoming?.boundaries) && incoming.boundaries.length > 0;
+    if (!hasIncomingBoundaries && Array.isArray(existing?.boundaries) && existing.boundaries.length > 0) {
+        incoming.boundaries = existing.boundaries;
+        logger.info(`Hydrated missing boundaries from existing campaign for retry update: campaignId=${incoming?.id}`);
+    }
+
+    const hasIncomingResources = Array.isArray(incoming?.resources) && incoming.resources.length > 0;
+    if (!hasIncomingResources && Array.isArray(existing?.resources) && existing.resources.length > 0) {
+        incoming.resources = existing.resources;
+        logger.info(`Hydrated missing resources from existing campaign for retry update: campaignId=${incoming?.id}`);
+    }
+
+    // Clear stale failure details when campaign is retried.
+    if (incoming?.additionalDetails && typeof incoming.additionalDetails === "object") {
+        delete incoming.additionalDetails.error;
+        delete incoming.additionalDetails.errorMessage;
     }
 }
 
