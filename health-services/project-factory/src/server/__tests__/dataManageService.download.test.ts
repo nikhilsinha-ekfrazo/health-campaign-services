@@ -150,7 +150,7 @@ function buildRequest(overrides: Record<string, any> = {}) {
     } as any;
 }
 
-describe("downloadDataService always-fresh behavior", () => {
+describe("downloadDataService bulk attendance reuse behavior", () => {
     beforeEach(() => {
         jest.clearAllMocks();
         mockValidateDownloadRequest.mockResolvedValue(undefined);
@@ -158,27 +158,24 @@ describe("downloadDataService always-fresh behavior", () => {
         mockSearchAllGeneratedResources.mockResolvedValue([]);
     });
 
-    it("always regenerates bulk template when id is not provided", async () => {
-        mockSearchAllGeneratedResources.mockResolvedValue([OLD_RESOURCE]);
-        mockSearchGeneratedResources.mockResolvedValue([COMPLETED_NEW_RESOURCE]);
-        mockGenerateTemplateDataService.mockResolvedValue(NEW_RESOURCE);
-
-        const request = buildRequest();
-        const result = await downloadDataService(request);
-
-        expect(mockGenerateTemplateDataService).toHaveBeenCalledWith(
-            {
-                type: "attendanceRegisterUserBulkMapping",
-                tenantId: "bednet",
-                hierarchyType: "ADMIN",
-                campaignId: "cmp-1",
-                localityCode: "loc-1",
+    it("reuses recently completed bulk template when id is not provided and forceUpdate is false", async () => {
+        const recentlyCompletedExisting = {
+            ...COMPLETED_NEW_RESOURCE,
+            id: "recently-completed-id",
+            additionalDetails: { localityCode: "loc-1" },
+            auditDetails: {
+                createdTime: Date.now() - 5000,
+                lastModifiedTime: Date.now() - 1000,
+                createdBy: "u",
+                lastModifiedBy: "u",
             },
-            "user-1",
-            "en_BEDNET",
-            request.body.RequestInfo
-        );
-        expect(result).toEqual([COMPLETED_NEW_RESOURCE]);
+        };
+        mockSearchAllGeneratedResources.mockResolvedValue([recentlyCompletedExisting]);
+
+        const result = await downloadDataService(buildRequest());
+
+        expect(result).toEqual([recentlyCompletedExisting]);
+        expect(mockGenerateTemplateDataService).not.toHaveBeenCalled();
         expect(mockCallGenerate).not.toHaveBeenCalled();
     });
 
@@ -211,7 +208,7 @@ describe("downloadDataService always-fresh behavior", () => {
         expect(mockGenerateTemplateDataService).not.toHaveBeenCalled();
     });
 
-    it("does not reuse active in-progress resource for bulk mapping and creates a fresh one", async () => {
+    it("reuses active in-progress resource for bulk mapping and does not create a fresh one", async () => {
         const inProgressExisting = {
             ...NEW_RESOURCE,
             id: "existing-inprogress-id",
@@ -219,19 +216,18 @@ describe("downloadDataService always-fresh behavior", () => {
             additionalDetails: { localityCode: "loc-1" },
             auditDetails: { createdTime: Date.now(), lastModifiedTime: Date.now(), createdBy: "u", lastModifiedBy: "u" },
         };
-        const completedExisting = {
+        const completedFromPoll = {
             ...inProgressExisting,
             status: "completed",
-            fileStoreid: "existing-completed-file",
+            fileStoreid: "completed-after-poll-file",
         };
         mockSearchAllGeneratedResources.mockResolvedValue([inProgressExisting]);
-        mockSearchGeneratedResources.mockResolvedValue([completedExisting]);
-        mockGenerateTemplateDataService.mockResolvedValue(NEW_RESOURCE);
+        mockSearchGeneratedResources.mockResolvedValue([completedFromPoll]);
 
         const result = await downloadDataService(buildRequest());
 
-        expect(mockGenerateTemplateDataService).toHaveBeenCalledTimes(1);
-        expect(result).toEqual([completedExisting]);
+        expect(mockGenerateTemplateDataService).not.toHaveBeenCalled();
+        expect(result).toEqual([completedFromPoll]);
         expect(mockCallGenerate).not.toHaveBeenCalled();
     });
 
@@ -297,7 +293,7 @@ describe("downloadDataService always-fresh behavior", () => {
         );
     });
 
-    it("does not reuse campaign-wide in-progress generation for bulk mapping requests", async () => {
+    it("reuses campaign-wide in-progress generation for campaign-wide bulk mapping requests", async () => {
         const campaignWideInProgress = {
             ...NEW_RESOURCE,
             id: "campaign-wide-inprogress-id",
@@ -305,23 +301,22 @@ describe("downloadDataService always-fresh behavior", () => {
             additionalDetails: {},
             auditDetails: { createdTime: Date.now(), lastModifiedTime: Date.now(), createdBy: "u", lastModifiedBy: "u" },
         };
-        const completedExisting = {
+        const completedFromPoll = {
             ...campaignWideInProgress,
             status: "completed",
             fileStoreid: "campaign-wide-file",
         };
         mockSearchAllGeneratedResources.mockResolvedValue([campaignWideInProgress]);
-        mockSearchGeneratedResources.mockResolvedValue([completedExisting]);
-        mockGenerateTemplateDataService.mockResolvedValue(NEW_RESOURCE);
+        mockSearchGeneratedResources.mockResolvedValue([completedFromPoll]);
 
         const result = await downloadDataService(buildRequest({ query: { localityCode: undefined } }));
 
-        expect(mockGenerateTemplateDataService).toHaveBeenCalledTimes(1);
-        expect(result).toEqual([completedExisting]);
+        expect(mockGenerateTemplateDataService).not.toHaveBeenCalled();
+        expect(result).toEqual([completedFromPoll]);
         expect(mockCallGenerate).not.toHaveBeenCalled();
     });
 
-    it("does not reuse a recently completed resource within reuse window for bulk mapping", async () => {
+    it("regenerates when forceUpdate is true even if a recently completed resource exists", async () => {
         const recentlyCompletedExisting = {
             ...COMPLETED_NEW_RESOURCE,
             id: "recently-completed-id",
@@ -337,7 +332,8 @@ describe("downloadDataService always-fresh behavior", () => {
         mockSearchGeneratedResources.mockResolvedValue([COMPLETED_NEW_RESOURCE]);
         mockGenerateTemplateDataService.mockResolvedValue(NEW_RESOURCE);
 
-        const result = await downloadDataService(buildRequest());
+        const request = buildRequest({ query: { forceUpdate: "true" } });
+        const result = await downloadDataService(request);
 
         expect(mockGenerateTemplateDataService).toHaveBeenCalledTimes(1);
         expect(result).toEqual([COMPLETED_NEW_RESOURCE]);
