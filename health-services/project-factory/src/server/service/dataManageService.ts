@@ -33,8 +33,6 @@ const sheetManageGenerationTypes = new Set<string>(
     Object.keys(generationtTemplateConfigs).filter((type) => !legacyOwnedGenerationTypes.has(type))
 );
 
-const downloadGeneratedStatusPollIntervalMs = 1000;
-const downloadGeneratedStatusPollMaxAttempts = 500;
 const staleInProgressResourceThresholdMs = 5 * 60 * 1000;
 const ALWAYS_FRESH_DOWNLOAD_TYPES = new Set<string>([
     "attendanceRegisterUserBulkMapping"
@@ -90,35 +88,6 @@ function newestForLocality(resources: any[], localityKey: string | null): any {
         .filter((resource) => localityKeyOf(resource) === localityKey)
         .sort((a, b) => toEpoch(b?.auditDetails?.createdTime) - toEpoch(a?.auditDetails?.createdTime))[0];
 }
-
-function sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitForGeneratedResourceTerminalStatus(
-    requestQuery: any,
-    locale: string,
-    generatedResourceId: string
-): Promise<any | null> {
-    for (let attempt = 0; attempt < downloadGeneratedStatusPollMaxAttempts; attempt++) {
-        const generatedResources = await searchGeneratedResources(
-            { ...requestQuery, id: generatedResourceId },
-            locale
-        );
-        const generatedResource = generatedResources?.[0];
-        const status = generatedResource?.status;
-
-        if (status === generatedResourceStatuses.completed || status === generatedResourceStatuses.failed) {
-            return generatedResource;
-        }
-
-        if (attempt < downloadGeneratedStatusPollMaxAttempts - 1) {
-            await sleep(downloadGeneratedStatusPollIntervalMs);
-        }
-    }
-    return null;
-}
-
 
 const downloadDataService = async (request: express.Request) => {
     await validateDownloadRequest(request);
@@ -219,13 +188,7 @@ const downloadDataService = async (request: express.Request) => {
             }
         }
 
-        const generatedResourceId = responseData?.[0]?.id;
-        if (generatedResourceId && responseData?.[0]?.status === generatedResourceStatuses.inprogress) {
-            const terminalResource = await waitForGeneratedResourceTerminalStatus(request?.query, locale, generatedResourceId);
-            if (terminalResource) {
-                responseData = [terminalResource];
-            }
-        }
+        // Do not block this request waiting for terminal status; callers should poll with generated id.
     }
 
     if (resourceDetails != null && responseData != null && responseData.length > 0) {

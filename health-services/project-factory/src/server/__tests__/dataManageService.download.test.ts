@@ -160,7 +160,6 @@ describe("downloadDataService always-fresh behavior", () => {
 
     it("always regenerates bulk template when id is not provided", async () => {
         mockSearchAllGeneratedResources.mockResolvedValue([OLD_RESOURCE]);
-        mockSearchGeneratedResources.mockResolvedValue([COMPLETED_NEW_RESOURCE]);
         mockGenerateTemplateDataService.mockResolvedValue(NEW_RESOURCE);
 
         const request = buildRequest();
@@ -178,7 +177,7 @@ describe("downloadDataService always-fresh behavior", () => {
             "en_BEDNET",
             request.body.RequestInfo
         );
-        expect(result).toEqual([COMPLETED_NEW_RESOURCE]);
+        expect(result).toEqual([NEW_RESOURCE]);
         expect(mockCallGenerate).not.toHaveBeenCalled();
     });
 
@@ -219,19 +218,13 @@ describe("downloadDataService always-fresh behavior", () => {
             additionalDetails: { localityCode: "loc-1" },
             auditDetails: { createdTime: Date.now(), lastModifiedTime: Date.now(), createdBy: "u", lastModifiedBy: "u" },
         };
-        const completedExisting = {
-            ...inProgressExisting,
-            status: "completed",
-            fileStoreid: "existing-completed-file",
-        };
         mockSearchAllGeneratedResources.mockResolvedValue([inProgressExisting]);
-        mockSearchGeneratedResources.mockResolvedValue([completedExisting]);
         mockGenerateTemplateDataService.mockResolvedValue(NEW_RESOURCE);
 
         const result = await downloadDataService(buildRequest());
 
         expect(mockGenerateTemplateDataService).toHaveBeenCalledTimes(1);
-        expect(result).toEqual([completedExisting]);
+        expect(result).toEqual([NEW_RESOURCE]);
         expect(mockCallGenerate).not.toHaveBeenCalled();
     });
 
@@ -305,19 +298,13 @@ describe("downloadDataService always-fresh behavior", () => {
             additionalDetails: {},
             auditDetails: { createdTime: Date.now(), lastModifiedTime: Date.now(), createdBy: "u", lastModifiedBy: "u" },
         };
-        const completedExisting = {
-            ...campaignWideInProgress,
-            status: "completed",
-            fileStoreid: "campaign-wide-file",
-        };
         mockSearchAllGeneratedResources.mockResolvedValue([campaignWideInProgress]);
-        mockSearchGeneratedResources.mockResolvedValue([completedExisting]);
         mockGenerateTemplateDataService.mockResolvedValue(NEW_RESOURCE);
 
         const result = await downloadDataService(buildRequest({ query: { localityCode: undefined } }));
 
         expect(mockGenerateTemplateDataService).toHaveBeenCalledTimes(1);
-        expect(result).toEqual([completedExisting]);
+        expect(result).toEqual([NEW_RESOURCE]);
         expect(mockCallGenerate).not.toHaveBeenCalled();
     });
 
@@ -334,13 +321,12 @@ describe("downloadDataService always-fresh behavior", () => {
             },
         };
         mockSearchAllGeneratedResources.mockResolvedValue([recentlyCompletedExisting]);
-        mockSearchGeneratedResources.mockResolvedValue([COMPLETED_NEW_RESOURCE]);
         mockGenerateTemplateDataService.mockResolvedValue(NEW_RESOURCE);
 
         const result = await downloadDataService(buildRequest());
 
         expect(mockGenerateTemplateDataService).toHaveBeenCalledTimes(1);
-        expect(result).toEqual([COMPLETED_NEW_RESOURCE]);
+        expect(result).toEqual([NEW_RESOURCE]);
         expect(mockCallGenerate).not.toHaveBeenCalled();
     });
 
@@ -352,12 +338,11 @@ describe("downloadDataService always-fresh behavior", () => {
             auditDetails: { createdTime: 1, lastModifiedTime: 1, createdBy: "u", lastModifiedBy: "u" },
         };
         mockSearchAllGeneratedResources.mockResolvedValue([staleInProgress]);
-        mockSearchGeneratedResources.mockResolvedValue([COMPLETED_NEW_RESOURCE]);
         mockGenerateTemplateDataService.mockResolvedValue(NEW_RESOURCE);
 
         const result = await downloadDataService(buildRequest());
 
         expect(mockGenerateTemplateDataService).toHaveBeenCalledTimes(1);
-        expect(result).toEqual([COMPLETED_NEW_RESOURCE]);
+        expect(result).toEqual([NEW_RESOURCE]);
     });
 });
